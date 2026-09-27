@@ -1,0 +1,283 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------
+   Typeface - Vazirmatn is self-hosted so the container builds offline
+   and Persian renders identically everywhere.
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/vazirmatn-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/vazirmatn-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/vazirmatn-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/vazirmatn-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Vazirmatn", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-brand-50: #edfbf8;
+  --color-brand-100: #d2f5ee;
+  --color-brand-200: #a6ebdf;
+  --color-brand-300: #6dd9cb;
+  --color-brand-400: #35bfb2;
+  --color-brand-500: #14a39a;
+  --color-brand-600: #0c8386;
+  --color-brand-700: #0d666c;
+  --color-brand-800: #0f5256;
+  --color-brand-900: #114449;
+
+  --color-ink-50: #f6f8fa;
+  --color-ink-100: #eceff3;
+  --color-ink-200: #d7dde5;
+  --color-ink-300: #b3bdca;
+  --color-ink-400: #8794a5;
+  --color-ink-500: #697789;
+  --color-ink-600: #525f70;
+  --color-ink-700: #3f4a59;
+  --color-ink-800: #27303c;
+  --color-ink-900: #131a23;
+  --color-ink-950: #080c12;
+
+  /* Chart series - the validated data-viz palette, light-mode steps */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  --color-series-4: #eda100;
+  --color-series-5: #e87ba4;
+  --color-series-6: #008300;
+  --color-series-7: #4a3aa7;
+  --color-series-8: #e34948;
+
+  --color-status-good: #0ca30c;
+  --color-status-warning: #fab219;
+  --color-status-serious: #ec835a;
+  --color-status-critical: #d03b3b;
+
+  --radius-4xl: 2rem;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.6s ease-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -18px, 0) scale(1.04); }
+}
+@keyframes shimmer {
+  0% { background-position: -140% 0; }
+  100% { background-position: 240% 0; }
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.85); opacity: 0.65; }
+  70% { transform: scale(1.55); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* ---------------------------------------------------------------
+   Semantic surface tokens. Light is the base; .dark re-declares
+   every value so the theme toggle wins in both directions.
+   --------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --page: #f4f6f8;
+  --page-veil: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f7f9fb;
+  --surface-raised: rgba(255, 255, 255, 0.78);
+  --text-primary: #0d141c;
+  --text-secondary: #4a5768;
+  --text-muted: #76839a;
+  --border: rgba(13, 20, 28, 0.10);
+  --border-strong: rgba(13, 20, 28, 0.16);
+  --grid: #e3e8ee;
+  --axis: #c3cbd6;
+  --chart-surface: #ffffff;
+  --shadow-soft: 0 1px 2px rgba(13, 20, 28, 0.05), 0 12px 32px -12px rgba(13, 20, 28, 0.16);
+  --shadow-lift: 0 2px 4px rgba(13, 20, 28, 0.06), 0 28px 60px -24px rgba(13, 20, 28, 0.28);
+  --aurora-1: rgba(20, 163, 154, 0.36);
+  --aurora-2: rgba(42, 120, 214, 0.30);
+  --aurora-3: rgba(122, 92, 231, 0.24);
+}
+
+.dark {
+  color-scheme: dark;
+  --page: #070a0e;
+  --page-veil: #0b1016;
+  --surface: #0e141b;
+  --surface-2: #131b24;
+  --surface-raised: rgba(18, 25, 33, 0.72);
+  --text-primary: #f1f5f9;
+  --text-secondary: #a9b6c6;
+  --text-muted: #7b8a9d;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --grid: #1c242e;
+  --axis: #2c3742;
+  --chart-surface: #0e141b;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 34px 70px -28px rgba(0, 0, 0, 0.85);
+  --aurora-1: rgba(20, 163, 154, 0.30);
+  --aurora-2: rgba(42, 120, 214, 0.26);
+  --aurora-3: rgba(122, 92, 231, 0.24);
+
+  /* Dark-mode chart steps - selected for the dark surface, not flipped */
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-series-4: #c98500;
+  --color-series-5: #d55181;
+  --color-series-6: #12a012;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: var(--page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-brand-400) 36%, transparent);
+    color: var(--text-primary);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* Numerals in tables and axes must line up */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--text-muted) 35%, transparent);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--text-muted) 60%, transparent);
+    background-clip: content-box;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility surface-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+@utility glass {
+  background-color: var(--surface-raised);
+  backdrop-filter: saturate(1.6) blur(18px);
+  -webkit-backdrop-filter: saturate(1.6) blur(18px);
+  border: 1px solid var(--border);
+}
+
+@utility text-gradient {
+  background-image: linear-gradient(115deg, var(--color-brand-500), var(--color-series-1) 52%, #7a5ce7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The aurora field behind the hero - the product's signature */
+.aurora {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 120%;
+  pointer-events: none;
+  filter: blur(72px);
+  opacity: 0.9;
+  z-index: 0;
+}
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  will-change: transform;
+}
+.aurora span:nth-child(1) {
+  width: 46vw; height: 46vw; inset-inline-start: 4%; top: 8%;
+  background: var(--aurora-1);
+  animation: float 9s ease-in-out infinite;
+}
+.aurora span:nth-child(2) {
+  width: 40vw; height: 40vw; inset-inline-end: 6%; top: 2%;
+  background: var(--aurora-2);
+  animation: float 11s ease-in-out infinite reverse;
+}
+.aurora span:nth-child(3) {
+  width: 34vw; height: 34vw; inset-inline-start: 38%; top: 38%;
+  background: var(--aurora-3);
+  animation: float 13s ease-in-out infinite;
+}
+
+.grid-veil {
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 35%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 35%, transparent 78%);
+}
+
+.shine {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, var(--color-brand-200) 55%, transparent) 45%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: var(--animate-shimmer);
+}

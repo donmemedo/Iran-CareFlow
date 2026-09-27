@@ -1,0 +1,17 @@
+export const locales = ["fa", "en"] as const;
+export type Locale = (typeof locales)[number];
+
+export const defaultLocale: Locale = "fa";
+
+export const localeMeta: Record<Locale, { dir: "rtl" | "ltr"; label: string; short: string; htmlLang: string }> = {
+  fa: { dir: "rtl", label: "فارسی", short: "فا", htmlLang: "fa-IR" },
+  en: { dir: "ltr", label: "English", short: "EN", htmlLang: "en" },
+};
+
+export function isLocale(value: string): value is Locale {
+  return (locales as readonly string[]).includes(value);
+}
+
+export function otherLocale(locale: Locale): Locale {
+  return locale === "fa" ? "en" : "fa";
+}

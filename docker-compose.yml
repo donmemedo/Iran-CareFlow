@@ -1,0 +1,55 @@
+name: careflow-iran
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-careflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-careflow}
+      POSTGRES_DB: ${POSTGRES_DB:-careflow}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careflow} -d ${POSTGRES_DB:-careflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [careflow]
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-careflow}:${POSTGRES_PASSWORD:-careflow}@db:5432/${POSTGRES_DB:-careflow}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3100,http://127.0.0.1:3100}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+    ports:
+      - "${API_PORT:-8008}:8000"
+    networks: [careflow]
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the client bundle: this is the URL the browser calls,
+        # so it must be reachable from the host, not from inside the network.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8008/api/v1}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3100}:3000"
+    networks: [careflow]
+
+volumes:
+  db-data:
+
+networks:
+  careflow:
+    driver: bridge
