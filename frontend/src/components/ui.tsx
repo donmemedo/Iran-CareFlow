@@ -75,9 +75,10 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center font-semibold whitespace-nowrap transition-all duration-200",
+        "inline-flex items-center justify-center font-semibold whitespace-nowrap",
+        "transition-[transform,background-color,filter,box-shadow] duration-150 ease-out",
         "disabled:cursor-not-allowed disabled:opacity-55",
-        "active:scale-[0.98]",
+        "active:scale-[0.97] active:duration-100",
         variantClass[variant],
         sizeClass[size],
         className,
@@ -101,7 +102,8 @@ export function LinkButton({
     <Link
       href={href}
       className={clsx(
-        "inline-flex items-center justify-center font-semibold whitespace-nowrap transition-all duration-200 active:scale-[0.98]",
+        "inline-flex items-center justify-center font-semibold whitespace-nowrap",
+        "transition-[transform,background-color,filter,box-shadow] duration-150 ease-out active:scale-[0.97] active:duration-100",
         variantClass[variant],
         sizeClass[size],
         className,

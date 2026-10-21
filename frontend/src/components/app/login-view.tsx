@@ -8,7 +8,7 @@ import { Activity, ArrowLeft, ArrowRight, KeyRound, Loader2, Mail } from "lucide
 import { Avatar, Button, Card } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitch } from "@/components/locale-switch";
-import { login, type ApiUser } from "@/lib/api";
+import { ApiError, login, type ApiUser } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
 import { useSession } from "@/lib/session";
 import type { Dictionary } from "@/i18n";
@@ -17,10 +17,11 @@ import type { Locale } from "@/i18n/config";
 export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const router = useRouter();
   const { refresh } = useSession();
-  const [email, setEmail] = useState("manager@careflow.ir");
-  const [password, setPassword] = useState("careflow");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [locked, setLocked] = useState(false);
   const { data: demoUsers } = useApi<ApiUser[]>("/auth/demo-users");
   const Arrow = locale === "fa" ? ArrowLeft : ArrowRight;
 
@@ -32,8 +33,9 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
       await login(email.trim(), password);
       refresh();
       router.push(`/${locale}/app`);
-    } catch {
+    } catch (failure) {
       setError(true);
+      setLocked(failure instanceof ApiError && failure.status === 429);
       setBusy(false);
     }
   }
@@ -64,12 +66,14 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55 }}
+            transition={{ type: "spring", bounce: 0, duration: 0.5 }}
           >
             <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{dict.auth.title}</h1>
             <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">{dict.auth.subtitle}</p>
 
-            <p className="mt-8 mb-3 text-xs font-bold text-[var(--text-muted)]">{dict.auth.demoUsers}</p>
+            {demoUsers?.length ? (
+              <p className="mt-8 mb-3 text-xs font-bold text-[var(--text-muted)]">{dict.auth.demoUsers}</p>
+            ) : null}
             <div className="grid gap-2.5 sm:grid-cols-2">
               {(demoUsers ?? []).map((demo) => {
                 const selected = email === demo.email;
@@ -101,13 +105,13 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
                 );
               })}
             </div>
-            <p className="mt-3 text-[11px] text-[var(--text-muted)]">{dict.auth.demoHint}</p>
+            {demoUsers?.length ? <p className="mt-3 text-[11px] text-[var(--text-muted)]">{dict.auth.demoHint}</p> : null}
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
+            transition={{ type: "spring", bounce: 0, duration: 0.55, delay: 0.08 }}
           >
             <Card className="p-6 sm:p-8">
               <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -120,6 +124,8 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
                     <input
                       id="login-email"
                       type="email"
+                      autoComplete="username"
+                      required
                       dir="ltr"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
@@ -137,6 +143,8 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
                     <input
                       id="login-password"
                       type="password"
+                      autoComplete="current-password"
+                      required
                       dir="ltr"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -147,7 +155,7 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
 
                 {error ? (
                   <p className="rounded-xl bg-[var(--color-status-critical)]/10 px-3 py-2.5 text-xs font-semibold text-[var(--color-status-critical)]">
-                    {dict.auth.error}
+                    {locked ? dict.auth.locked : dict.auth.error}
                   </p>
                 ) : null}
 
@@ -157,7 +165,9 @@ export function LoginView({ locale, dict }: { locale: Locale; dict: Dictionary }
                   {busy ? null : <Arrow size={16} />}
                 </Button>
 
-                <p className="text-center text-[11px] text-[var(--text-muted)]">{dict.auth.passwordHint}</p>
+                {demoUsers?.length ? (
+                  <p className="text-center text-[11px] text-[var(--text-muted)]">{dict.auth.passwordHint}</p>
+                ) : null}
               </form>
             </Card>
 

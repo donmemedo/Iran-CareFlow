@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Lead
+from ..models import Lead, utcnow
 from ..schemas import LeadCreate, LeadOut, RoiLine, RoiRequest, RoiResponse
+from ..security import audit, rate_limit
 
 router = APIRouter(tags=["public"])
 
@@ -23,7 +24,7 @@ SHIFTS_PER_STAFF_YEAR = 230
 FIRST_YEAR_RAMP = 0.65               # roll-out means year one captures part of the gain
 
 
-@router.post("/roi/calculate", response_model=RoiResponse)
+@router.post("/roi/calculate", response_model=RoiResponse, dependencies=[Depends(rate_limit(60, 60))])
 def calculate_roi(payload: RoiRequest) -> RoiResponse:
     occupancy = payload.occupancy_rate / 100
     bed_days_per_year = payload.beds * occupancy * 365
@@ -130,8 +131,11 @@ def calculate_roi(payload: RoiRequest) -> RoiResponse:
     )
 
 
-@router.post("/leads", response_model=LeadOut, status_code=201)
+@router.post("/leads", response_model=LeadOut, status_code=201, dependencies=[Depends(rate_limit(5, 600))])
 def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> LeadOut:
+    if payload.website:  # honeypot tripped: answer like success so bots learn nothing, store nothing
+        audit("lead.honeypot")
+        return LeadOut(id=0, full_name=payload.full_name, organization=payload.organization, email=payload.email, created_at=utcnow())
     lead = Lead(
         full_name=payload.full_name.strip(),
         organization=payload.organization.strip(),

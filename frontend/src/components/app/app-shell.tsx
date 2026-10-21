@@ -64,12 +64,14 @@ export function AppShell({
     setBellOpen(false);
   }, [pathname]);
 
+  // IT sees aggregates only (the API enforces it with 403); do not offer screens that cannot load.
+  const clinical = user?.role !== "it";
   const items = [
     { href: `/${locale}/app`, label: dict.app.nav.dashboard, icon: LayoutDashboard, exact: true },
-    { href: `/${locale}/app/patients`, label: dict.app.nav.patients, icon: Users },
+    ...(clinical ? [{ href: `/${locale}/app/patients`, label: dict.app.nav.patients, icon: Users }] : []),
     { href: `/${locale}/app/pathways`, label: dict.app.nav.pathways, icon: Workflow },
     { href: `/${locale}/app/analytics`, label: dict.app.nav.analytics, icon: BrainCircuit },
-    { href: `/${locale}/app/collaboration`, label: dict.app.nav.collaboration, icon: MessagesSquare },
+    ...(clinical ? [{ href: `/${locale}/app/collaboration`, label: dict.app.nav.collaboration, icon: MessagesSquare }] : []),
     { href: `/${locale}/app/integrations`, label: dict.app.nav.integrations, icon: Network },
     { href: `/${locale}/app/settings`, label: dict.app.nav.settings, icon: Settings },
   ];
@@ -222,7 +224,8 @@ export function AppShell({
                     initial={{ opacity: 0, y: -6, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.16 }}
+                    transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                    style={{ transformOrigin: locale === "fa" ? "top left" : "top right" }}
                     className="surface-card absolute end-0 top-12 z-50 max-h-96 w-80 overflow-auto rounded-2xl p-2"
                   >
                     {unacknowledged.length === 0 ? (

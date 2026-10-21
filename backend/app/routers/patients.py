@@ -1,12 +1,15 @@
-"""Patient list, detail, pathway progression and the collaboration thread."""
-from datetime import datetime
+"""Patient list, detail, pathway progression and the collaboration thread.
 
+Access model: IT sees aggregates only. Clinical roles see their department's patients plus
+any patient whose care team they belong to; managers and hospital-wide staff see all.
+Out-of-scope ids answer 404, not 403, so ids cannot be probed for existence.
+"""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..db import get_db
-from ..models import CaseStep, Message, Patient, User, utcnow
+from ..models import CareTeamMember, CaseStep, Message, Patient, User, utcnow
 from ..schemas import (
     CareTeamOut,
     CaseStepOut,
@@ -15,9 +18,21 @@ from ..schemas import (
     PatientDetailOut,
     PatientOut,
 )
-from ..security import current_user
+from ..security import PATIENT_READERS, audit, can_advance, patient_scope, rate_limit, require_role
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+_LIST_LOAD = (
+    joinedload(Patient.department),
+    joinedload(Patient.pathway),
+    selectinload(Patient.case_steps).joinedload(CaseStep.step),
+)
+_DETAIL_LOAD = (
+    *_LIST_LOAD,
+    selectinload(Patient.case_steps).joinedload(CaseStep.assignee),
+    selectinload(Patient.care_team).joinedload(CareTeamMember.user),
+    selectinload(Patient.messages).joinedload(Message.author),
+)
 
 
 def _progress(patient: Patient) -> tuple[float, CaseStep | None, bool]:
@@ -95,38 +110,48 @@ def _message_out(message: Message) -> MessageOut:
     )
 
 
-@router.get("", response_model=list[PatientOut], dependencies=[Depends(current_user)])
+def _load(db: Session, patient_id: int, user: User) -> Patient:
+    """One scoped, eager-loaded fetch - the single choke point for patient access."""
+    query = patient_scope(select(Patient).where(Patient.id == patient_id).options(*_DETAIL_LOAD), user)
+    patient = db.execute(query).unique().scalar_one_or_none()
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+
+@router.get("", response_model=list[PatientOut])
 def list_patients(
     db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PATIENT_READERS)),
     department_id: int | None = None,
-    status: str | None = None,
+    status: str | None = Query(default=None, max_length=24),
     blocked: bool | None = None,
-    q: str | None = None,
+    q: str | None = Query(default=None, max_length=100),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[PatientOut]:
-    query = select(Patient).order_by(Patient.acuity, Patient.admitted_at)
+    query = patient_scope(select(Patient), user).options(*_LIST_LOAD).order_by(Patient.acuity, Patient.admitted_at)
     if department_id:
         query = query.where(Patient.department_id == department_id)
     if status:
         query = query.where(Patient.status == status)
-    patients = db.execute(query).scalars().all()
-    items = [_to_out(p) for p in patients]
     if blocked is not None:
-        items = [p for p in items if p.blocked == blocked]
-    if q:
-        needle = q.strip().lower()
-        items = [
-            p for p in items
-            if needle in p.name_fa.lower() or needle in p.name_en.lower() or needle in p.mrn.lower()
-        ]
-    return items[:limit]
+        has_blocked = Patient.case_steps.any(CaseStep.status == "blocked")
+        query = query.where(has_blocked if blocked else ~has_blocked)
+    if q and (needle := q.strip().lower()):
+        query = query.where(
+            func.lower(Patient.name_en).contains(needle, autoescape=True)
+            | func.lower(Patient.name_fa).contains(needle, autoescape=True)
+            | func.lower(Patient.mrn).contains(needle, autoescape=True)
+        )
+    patients = db.execute(query.limit(limit)).unique().scalars().all()
+    return [_to_out(p) for p in patients]
 
 
-@router.get("/{patient_id}", response_model=PatientDetailOut, dependencies=[Depends(current_user)])
-def patient_detail(patient_id: int, db: Session = Depends(get_db)) -> PatientDetailOut:
-    patient = db.get(Patient, patient_id)
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+@router.get("/{patient_id}", response_model=PatientDetailOut)
+def patient_detail(
+    patient_id: int, db: Session = Depends(get_db), user: User = Depends(require_role(*PATIENT_READERS))
+) -> PatientDetailOut:
+    patient = _load(db, patient_id, user)
     base = _to_out(patient)
     return PatientDetailOut(
         **base.model_dump(),
@@ -151,14 +176,19 @@ def advance_step(
     patient_id: int,
     case_step_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: User = Depends(require_role(*PATIENT_READERS)),
+    _: None = Depends(rate_limit(60, 60)),
 ) -> list[CaseStepOut]:
-    """Complete the given step and activate the next one - the workflow engine in miniature."""
-    case_step = db.get(CaseStep, case_step_id)
-    if case_step is None or case_step.patient_id != patient_id:
+    """Complete the current step and activate the next - only by the role that owns the step."""
+    patient = _load(db, patient_id, user)
+    case_step = next((s for s in patient.case_steps if s.id == case_step_id), None)
+    if case_step is None:
         raise HTTPException(status_code=404, detail="Step not found")
-    if case_step.status == "done":
-        raise HTTPException(status_code=409, detail="Step already completed")
+    if not can_advance(user, case_step.step.owner_role):
+        audit("step.denied", user=user.id, patient=patient_id, step=case_step_id)
+        raise HTTPException(status_code=403, detail="This step belongs to another role")
+    if case_step.status not in ("active", "blocked"):  # no skipping ahead, no re-completing
+        raise HTTPException(status_code=409, detail="Only the current step can be completed")
 
     now = utcnow()
     case_step.status = "done"
@@ -166,9 +196,7 @@ def advance_step(
     case_step.completed_at = now
     case_step.assignee_id = case_step.assignee_id or user.id
 
-    patient = db.get(Patient, patient_id)
-    steps = sorted(patient.case_steps, key=lambda s: s.position)
-    following = next((s for s in steps if s.position > case_step.position), None)
+    following = next((s for s in sorted(patient.case_steps, key=lambda s: s.position) if s.position > case_step.position), None)
     if following is not None:
         following.status = "active"
         following.started_at = following.started_at or now
@@ -176,6 +204,7 @@ def advance_step(
         patient.status = "discharged"
         patient.discharged_at = now
     db.commit()
+    audit("step.advanced", user=user.id, patient=patient_id, step=case_step_id)
     db.refresh(patient)
     return [_step_out(s) for s in sorted(patient.case_steps, key=lambda s: s.position)]
 
@@ -185,21 +214,21 @@ def post_message(
     patient_id: int,
     payload: MessageCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: User = Depends(require_role(*PATIENT_READERS)),
+    _: None = Depends(rate_limit(60, 60)),
 ) -> MessageOut:
-    patient = db.get(Patient, patient_id)
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    _load(db, patient_id, user)  # scope check
     message = Message(patient_id=patient_id, author_id=user.id, body=payload.body.strip(), kind=payload.kind)
     db.add(message)
     db.commit()
     db.refresh(message)
+    audit("message.posted", user=user.id, patient=patient_id, kind=payload.kind)
     return _message_out(message)
 
 
-@router.get("/{patient_id}/messages", response_model=list[MessageOut], dependencies=[Depends(current_user)])
-def list_messages(patient_id: int, db: Session = Depends(get_db)) -> list[MessageOut]:
-    patient = db.get(Patient, patient_id)
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+@router.get("/{patient_id}/messages", response_model=list[MessageOut])
+def list_messages(
+    patient_id: int, db: Session = Depends(get_db), user: User = Depends(require_role(*PATIENT_READERS))
+) -> list[MessageOut]:
+    patient = _load(db, patient_id, user)
     return [_message_out(m) for m in sorted(patient.messages, key=lambda m: m.created_at)]

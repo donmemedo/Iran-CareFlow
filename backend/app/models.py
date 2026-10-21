@@ -6,7 +6,7 @@ process standardisation (CarePathway/CaseStep), clinical collaboration
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -88,11 +88,11 @@ class Patient(Base):
     name_fa: Mapped[str] = mapped_column(String(120))
     age: Mapped[int] = mapped_column(Integer)
     sex: Mapped[str] = mapped_column(String(8))
-    department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"))
-    pathway_id: Mapped[int] = mapped_column(ForeignKey("care_pathways.id"))
+    department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), index=True)
+    pathway_id: Mapped[int] = mapped_column(ForeignKey("care_pathways.id"), index=True)
     bed: Mapped[str] = mapped_column(String(16), default="")
     acuity: Mapped[int] = mapped_column(Integer, default=3)  # 1 critical .. 5 minor
-    status: Mapped[str] = mapped_column(String(24), default="active")  # active | discharged | blocked
+    status: Mapped[str] = mapped_column(String(24), default="active", index=True)  # active | discharged | blocked
     diagnosis_en: Mapped[str] = mapped_column(String(200), default="")
     diagnosis_fa: Mapped[str] = mapped_column(String(200), default="")
     admitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -119,10 +119,10 @@ class CaseStep(Base):
     __tablename__ = "case_steps"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"))
-    step_id: Mapped[int] = mapped_column(ForeignKey("pathway_steps.id"))
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    step_id: Mapped[int] = mapped_column(ForeignKey("pathway_steps.id"), index=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(24), default="pending")  # pending | active | done | blocked
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)  # pending | active | done | blocked
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -138,8 +138,8 @@ class CareTeamMember(Base):
     __tablename__ = "care_team_members"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     role_en: Mapped[str] = mapped_column(String(80), default="")
     role_fa: Mapped[str] = mapped_column(String(80), default="")
 
@@ -151,7 +151,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"))
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     body: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(24), default="note")  # note | request | decision | alert
@@ -174,7 +174,7 @@ class Alert(Base):
     detail_fa: Mapped[str] = mapped_column(Text, default="")
     metric: Mapped[str] = mapped_column(String(64), default="")
     value: Mapped[float] = mapped_column(Float, default=0)
-    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     department: Mapped[Department | None] = relationship()
@@ -182,6 +182,7 @@ class Alert(Base):
 
 class OccupancyRecord(Base):
     __tablename__ = "occupancy_records"
+    __table_args__ = (Index("ix_occupancy_department_day", "department_id", "day"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"))

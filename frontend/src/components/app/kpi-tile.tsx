@@ -26,7 +26,7 @@ export function KpiTile({ kpi, locale, dict, index }: { kpi: Kpi; locale: Locale
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.05 }}
+      transition={{ type: "spring", bounce: 0, duration: 0.45, delay: index * 0.05 }}
     >
       <Card className="h-full p-4 sm:p-5">
         <p className="truncate text-[11px] font-semibold text-[var(--text-muted)]">

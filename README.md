@@ -16,29 +16,39 @@ Iranian hospitals, as **CareFlow Iran**.
 ## Quick start (Docker — recommended)
 
 ```bash
-cp .env.example .env          # adjust ports if you like
+cp .env.example .env
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # run twice: JWT_SECRET and POSTGRES_PASSWORD
+# edit .env: paste both values.
+# For a local demo ONLY, also set:  APP_ENV=development  SEED_ON_STARTUP=true  DEMO_MODE=true
 docker compose up --build
 ```
+
+Compose refuses to start without `JWT_SECRET` and `POSTGRES_PASSWORD`, and the API refuses to boot in
+production with a weak secret or any demo flag. That is deliberate.
 
 | Service | URL |
 |---|---|
 | Web app | http://localhost:3100 → redirects to `/fa` |
-| API docs | http://localhost:8008/docs |
-| Postgres | internal only (`db:5432`) |
+| API docs | http://localhost:8008/docs (development only) |
+| Postgres | internal network only, not published |
 
-> Ports default to **3100/8008** rather than 3000/8000 so the stack does not collide with
-> anything else you already run. Change `WEB_PORT` / `API_PORT` in `.env` — and keep
-> `PUBLIC_API_URL` in sync, since the browser (not the container) calls the API.
->
-> If `docker compose` reports it cannot reach the Docker socket, either start Docker Desktop or
-> switch to the system daemon with `docker context use default`.
+> Ports default to **3100/8008** and are bound to `127.0.0.1`; put a TLS reverse proxy in front for anything
+> beyond your own machine. Change `WEB_PORT` / `API_PORT` in `.env` — and keep `PUBLIC_API_URL` in sync,
+> since the browser (not the container) calls the API.
 
-### Demo sign-in
+### Demo sign-in (demo mode only)
 
-Every demo account uses the password **`careflow`**:
+With `DEMO_MODE=true` and `SEED_ON_STARTUP=true` the sign-in screen lists four personas. Their shared
+password is `DEMO_PASSWORD` (default `careflow`). Roles are enforced:
 
-| Role | Email |
-|---|---|
+| Role | Email | Sees |
+|---|---|---|
+| Hospital operations director | `manager@careflow.ir` | everything |
+| Attending physician (Internal Medicine) | `physician@careflow.ir` | own department + own care teams; may complete any step |
+| Head nurse, emergency | `nurse@careflow.ir` | own department + own care teams; completes nurse steps |
+| Head of health IT | `it@careflow.ir` | dashboards and integrations only — no patient records |
+
+---|---|
 | Hospital operations director | `manager@careflow.ir` |
 | Attending physician | `physician@careflow.ir` |
 | Head nurse, emergency | `nurse@careflow.ir` |
@@ -54,24 +64,25 @@ The sign-in screen lists these; clicking one fills the form.
 
 ```bash
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --reload --port 8008
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+APP_ENV=development SEED_ON_STARTUP=true DEMO_MODE=true .venv/bin/python -m uvicorn app.main:app --reload --port 8008
 ```
 
-SQLite is the default (`careflow.db`), created and seeded on first start.
+SQLite is the default (`careflow.db`). With an empty `JWT_SECRET` in development the server mints a random
+secret per start, so tokens do not survive a restart.
 
 **Frontend**
 
 ```bash
 cd frontend
-npm install
+npm ci
 NEXT_PUBLIC_API_URL=http://localhost:8008/api/v1 npm run dev
 ```
 
 **Tests**
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests -q     # 11 API tests
+cd backend && .venv/bin/python -m pytest tests -q     # 53 API + security + query-budget tests, temp database
 cd frontend && npm run build                          # type-check + production build
 ```
 
@@ -191,7 +202,11 @@ Xcode — the latter needs macOS and an Apple developer account.
 
 ## Security notes
 
-The demo ships deliberately simple defaults: a dev `JWT_SECRET`, seeded demo accounts with a
-shared password, and permissive CORS for localhost. Before any real deployment set a strong
-`JWT_SECRET`, disable `SEED_ON_STARTUP`, replace the demo accounts, restrict `CORS_ORIGINS`, and
-terminate TLS in front of both services. Patient data is synthetic throughout.
+Full review, findings, attack tree and residual risk: [`docs/SECURITY.md`](docs/SECURITY.md).
+Plan and roadmap: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+
+In short: fail-closed configuration, role- and department-scoped access, login throttling with lockout,
+revocable short-lived tokens, strict CORS and security headers, validated and size-capped inputs, hardened
+containers, and CI that scans code, dependencies, secrets and images. Known gaps (token still in browser
+storage, process-local rate limits, no migrations tool, no MFA) are listed there with the order to fix them.
+Patient data in this repository is synthetic.

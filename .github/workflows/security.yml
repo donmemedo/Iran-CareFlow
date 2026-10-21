@@ -1,0 +1,101 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"   # weekly: new advisories appear even when the code does not change
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # whole history: a secret removed later is still leaked
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+
+  sast:
+    name: SAST (semgrep + bandit)
+    runs-on: ubuntu-latest
+    container: { image: semgrep/semgrep }
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep scan --config p/security-audit --config p/owasp-top-ten --config p/python --config p/typescript --severity ERROR --error backend/app frontend/src
+      - run: pip install bandit && bandit -r backend/app -ll -q
+
+  backend:
+    name: Backend deps + tests
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: backend/requirements-dev.txt }
+      - run: pip install -r requirements-dev.txt pip-audit
+      - name: Dependency advisories (SCA)
+        run: pip-audit -r requirements.txt --progress-spinner off
+      - name: Tests (includes the security regression suite and query budgets)
+        run: python -m pytest tests -q
+
+  frontend:
+    name: Frontend deps + build
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci --ignore-scripts
+      - name: Dependency advisories (SCA)
+        run: npm audit --audit-level=high
+      - name: Type-check + production build
+        run: npm run build
+        env: { NEXT_TELEMETRY_DISABLED: "1" }
+
+  config:
+    name: Dockerfile + compose lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with: { dockerfile: backend/Dockerfile, failure-threshold: warning }
+      - uses: hadolint/hadolint-action@v3.1.0
+        with: { dockerfile: frontend/Dockerfile, failure-threshold: warning }
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: { scan-type: config, scan-ref: ., severity: "HIGH,CRITICAL", exit-code: "1" }
+
+  images:
+    name: Image CVE scan + SBOM
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t careflow-api:ci backend && docker build -t careflow-web:ci frontend
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: { image-ref: "careflow-api:ci", severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1" }
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: { image-ref: "careflow-web:ci", severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1" }
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: { image-ref: "careflow-api:ci", format: cyclonedx, output: sbom-api.json }
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: sbom-api.json }
+
+  gate:
+    name: Security gate
+    runs-on: ubuntu-latest
+    needs: [secrets, sast, backend, frontend, config, images]
+    if: always()
+    steps:
+      - name: Fail when any security job failed or was skipped
+        run: |
+          [ "${{ contains(needs.*.result, 'failure') }}" = "false" ] && [ "${{ contains(needs.*.result, 'cancelled') }}" = "false" ]

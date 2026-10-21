@@ -1,8 +1,9 @@
 """Predictive analytics endpoints - occupancy, emergency load, resource demand."""
+from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..analytics import holt_forecast, trend_pct
@@ -22,6 +23,27 @@ def _records(db: Session, department_id: int | None, days: int) -> list[Occupanc
     return list(db.execute(query).scalars().all())
 
 
+def _daily(db: Session, department_id: int | None, days: int) -> list[tuple]:
+    """(day, occupied, capacity, admissions, discharges, ed) per day, summed in SQL instead of in Python."""
+    cutoff = date.today() - timedelta(days=days)
+    query = (
+        select(
+            OccupancyRecord.day,
+            func.sum(OccupancyRecord.occupied_beds),
+            func.sum(OccupancyRecord.capacity),
+            func.sum(OccupancyRecord.admissions),
+            func.sum(OccupancyRecord.discharges),
+            func.sum(OccupancyRecord.ed_arrivals),
+        )
+        .where(OccupancyRecord.day >= cutoff)
+        .group_by(OccupancyRecord.day)
+        .order_by(OccupancyRecord.day)
+    )
+    if department_id:
+        query = query.where(OccupancyRecord.department_id == department_id)
+    return db.execute(query).all()
+
+
 @router.get("/occupancy", response_model=OccupancyOut, dependencies=[Depends(current_user)])
 def occupancy(
     db: Session = Depends(get_db),
@@ -33,33 +55,22 @@ def occupancy(
     if department_id and department is None:
         raise HTTPException(status_code=404, detail="Department not found")
 
-    records = _records(db, department_id, days)
-    if not records:
+    rows = _daily(db, department_id, days)
+    if not rows:
         raise HTTPException(status_code=404, detail="No occupancy data")
 
-    buckets: dict[date, dict[str, float]] = {}
-    for record in records:
-        bucket = buckets.setdefault(
-            record.day, {"occupied": 0.0, "capacity": 0.0, "admissions": 0.0, "discharges": 0.0, "ed": 0.0}
-        )
-        bucket["occupied"] += record.occupied_beds
-        bucket["capacity"] += record.capacity
-        bucket["admissions"] += record.admissions
-        bucket["discharges"] += record.discharges
-        bucket["ed"] += record.ed_arrivals
-
-    ordered_days = sorted(buckets)
+    ordered_days = [r[0] for r in rows]
     history = [
         SeriesPoint(
             day=day,
-            occupied=buckets[day]["occupied"],
-            capacity=buckets[day]["capacity"],
-            admissions=int(buckets[day]["admissions"]),
-            discharges=int(buckets[day]["discharges"]),
-            ed_arrivals=int(buckets[day]["ed"]),
-            occupancy_rate=round(buckets[day]["occupied"] / max(buckets[day]["capacity"], 1) * 100, 1),
+            occupied=float(occupied),
+            capacity=float(capacity),
+            admissions=int(admissions),
+            discharges=int(discharges),
+            ed_arrivals=int(ed),
+            occupancy_rate=round(float(occupied) / max(float(capacity), 1) * 100, 1),
         )
-        for day in ordered_days
+        for day, occupied, capacity, admissions, discharges, ed in rows
     ]
 
     series = [point.occupied for point in history]
@@ -109,13 +120,21 @@ def emergency_load(
 def resource_demand(db: Session = Depends(get_db), horizon: int = Query(default=7, ge=1, le=30)) -> dict:
     """Nurse/physician demand implied by the forecast, at 1 nurse per 4 occupied beds."""
     departments = db.execute(select(Department).where(Department.bed_capacity > 0)).scalars().all()
+    cutoff = date.today() - timedelta(days=120)
+    by_dept: dict[int, list[tuple[date, float]]] = defaultdict(list)
+    for dept_id, day, occupied in db.execute(
+        select(OccupancyRecord.department_id, OccupancyRecord.day, OccupancyRecord.occupied_beds)
+        .where(OccupancyRecord.day >= cutoff)
+        .order_by(OccupancyRecord.department_id, OccupancyRecord.day)
+    ):
+        by_dept[dept_id].append((day, float(occupied)))
     rows = []
     for dept in departments:
-        records = _records(db, dept.id, 120)
-        if not records:
+        points = by_dept.get(dept.id)
+        if not points:
             continue
-        series = [float(r.occupied_beds) for r in records]
-        forecast = holt_forecast(series, [r.day for r in records], horizon=horizon)
+        series = [v for _, v in points]
+        forecast = holt_forecast(series, [d for d, _ in points], horizon=horizon)
         peak = max(p.value for p in forecast)
         nurse_ratio = {"icu": 2.0, "emergency": 3.0}.get(dept.kind, 5.0)
         rows.append(
@@ -140,11 +159,16 @@ def resource_demand(db: Session = Depends(get_db), horizon: int = Query(default=
 @router.get("/seasonality", dependencies=[Depends(current_user)])
 def seasonality(db: Session = Depends(get_db)) -> dict:
     """Weekday load profile - the operational signature the plan sells on."""
-    records = _records(db, None, 180)
     buckets: dict[int, list[float]] = {i: [] for i in range(7)}
-    totals: dict[date, float] = {}
-    for record in records:
-        totals[record.day] = totals.get(record.day, 0) + record.occupied_beds
+    cutoff = date.today() - timedelta(days=180)
+    totals = {
+        day: float(occupied)
+        for day, occupied in db.execute(
+            select(OccupancyRecord.day, func.sum(OccupancyRecord.occupied_beds))
+            .where(OccupancyRecord.day >= cutoff)
+            .group_by(OccupancyRecord.day)
+        )
+    }
     for day, value in totals.items():
         buckets[day.weekday()].append(value)
     overall = sum(totals.values()) / max(len(totals), 1)

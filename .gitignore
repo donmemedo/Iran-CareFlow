@@ -18,5 +18,9 @@ npm-debug.log*
 # OS
 .DS_Store
 
-docs/
+# Third-party business-plan sources stay local; our own docs are tracked.
+docs/source/
 .idea/
+graphify-out/
+.claude/
+*.tsbuildinfo
