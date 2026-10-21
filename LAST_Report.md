@@ -44,7 +44,7 @@ No part of the work needed a different model, so nothing was skipped for that re
 **Containers and CI**
 - Dockerfile: runtime-only dependencies, numeric non-root user, no curl.
 - Compose: required secrets, loopback-only ports, internal database network, dropped capabilities, read-only filesystems, limits, rotated logs.
-- `.github/workflows/security.yml` (secrets, SAST, SCA, tests, build, Dockerfile lint, image scan, SBOM, one gate job), `dependabot.yml`, `.pre-commit-config.yaml`, `.gitleaks.toml`.
+- `.github/workflows/security.yml` (secrets, SAST, SCA, tests, build, Dockerfile lint, image scan, SBOM, one gate job; third-party actions pinned to commit SHAs after an automated review flagged floating tags, which also exposed a wrong Trivy tag name that would have failed the first run), `dependabot.yml`, `.pre-commit-config.yaml`, `.gitleaks.toml`.
 
 **Documentation**: `README.md`, `docs/SECURITY.md` (findings, attack tree, red/blue view, PO / tech lead / QA notes, residual risk, checklist), `docs/IMPLEMENTATION_PLAN.md`, this report. `HANDOFF.md` is marked superseded. `.gitignore` now tracks `docs/` except `docs/source/` (your third-party business-plan PDFs stay local).
 
