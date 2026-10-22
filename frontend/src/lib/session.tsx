@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearSession, getStoredUser, getToken, type ApiUser } from "./api";
+import { apiFetch, clearSession, getStoredUser, getToken, type ApiUser } from "./api";
 import type { Locale } from "@/i18n/config";
 
 type SessionValue = {
@@ -37,6 +37,8 @@ export function SessionProvider({ children, locale }: { children: React.ReactNod
   }, [refresh]);
 
   const signOut = useCallback(() => {
+    // Revoke the token server-side first; local sign-out must not depend on the network.
+    void apiFetch("/auth/logout", { method: "POST" }).catch(() => undefined);
     clearSession();
     setUser(null);
     router.push(`/${locale}/login`);

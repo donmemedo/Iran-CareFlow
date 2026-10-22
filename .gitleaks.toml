@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic test fixtures only - no real credentials live here"
+paths = ['''backend/tests/.*''', '''docs/.*''']

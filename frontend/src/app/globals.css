@@ -210,6 +210,40 @@
   }
 }
 
+/* ---------------------------------------------------------------
+   Apple-design: respect the three independent accessibility signals.
+   Translucency becomes solid, and contrast gets a defined edge.
+   --------------------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+  :root, .dark {
+    --surface-raised: var(--surface);
+  }
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .aurora { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root, .dark {
+    --border: var(--border-strong);
+    --text-muted: var(--text-secondary);
+    --surface-raised: var(--surface);
+  }
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: var(--text-muted);
+  }
+}
+
+/* Persian is cursive: positive or negative tracking tears the joins apart. Tighten Latin display
+   text only; Persian keeps its natural spacing. */
+html:lang(fa) .tracking-tight,
+html:lang(fa) :where(h1, h2, h3) {
+  letter-spacing: normal;
+}
+
 @utility surface-card {
   background-color: var(--surface);
   border: 1px solid var(--border);

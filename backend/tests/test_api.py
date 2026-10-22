@@ -1,23 +1,4 @@
 """End-to-end checks against the seeded demo dataset."""
-import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture(scope="module")
-def auth(client):
-    response = client.post("/api/v1/auth/login", json={"email": "manager@careflow.ir", "password": "careflow"})
-    assert response.status_code == 200
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
-
-
 def test_health(client):
     assert client.get("/api/v1/health").json()["status"] == "ok"
 
@@ -52,13 +33,14 @@ def test_patient_detail_carries_pathway_and_thread(client, auth):
     assert 0 <= detail["progress"] <= 100
 
 
-def test_advancing_a_step_moves_the_case_forward(client, auth):
-    patients = client.get("/api/v1/patients?status=active&limit=50", headers=auth).json()
+def test_advancing_a_step_moves_the_case_forward(client, login):
+    physician = login("physician@careflow.ir")  # physicians may sign off any step in their scope
+    patients = client.get("/api/v1/patients?status=active&limit=50", headers=physician).json()
     target = next(p for p in patients if 0 < p["progress"] < 100)
-    detail = client.get(f"/api/v1/patients/{target['id']}", headers=auth).json()
+    detail = client.get(f"/api/v1/patients/{target['id']}", headers=physician).json()
     current = next(s for s in detail["steps"] if s["status"] in ("active", "blocked"))
     steps = client.post(
-        f"/api/v1/patients/{target['id']}/steps/{current['id']}/advance", headers=auth
+        f"/api/v1/patients/{target['id']}/steps/{current['id']}/advance", headers=physician
     ).json()
     advanced = next(s for s in steps if s["id"] == current["id"])
     assert advanced["status"] == "done"

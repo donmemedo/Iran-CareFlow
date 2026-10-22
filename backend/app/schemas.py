@@ -1,5 +1,6 @@
 """Pydantic payloads exposed by the API."""
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -14,8 +15,10 @@ class Bilingual(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=160)
+    password: str = Field(min_length=1, max_length=256)  # bounds the PBKDF2 input
 
 
 class UserOut(ORMModel):
@@ -147,8 +150,10 @@ class MessageOut(BaseModel):
 
 
 class MessageCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     body: str = Field(min_length=1, max_length=2000)
-    kind: str = "note"
+    kind: Literal["note", "request", "decision", "alert"] = "note"
 
 
 class PatientOut(ORMModel):
@@ -240,6 +245,8 @@ class IntegrationOut(ORMModel):
 
 
 class RoiRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     beds: int = Field(default=300, ge=20, le=3000)
     occupancy_rate: float = Field(default=78, ge=30, le=100)
     avg_length_of_stay: float = Field(default=4.2, ge=0.5, le=30)
@@ -279,14 +286,17 @@ class RoiResponse(BaseModel):
 
 
 class LeadCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     full_name: str = Field(min_length=2, max_length=120)
     organization: str = Field(min_length=2, max_length=160)
-    role: str = ""
-    email: EmailStr
-    phone: str = ""
-    beds: int = 0
-    message: str = ""
-    locale: str = "fa"
+    role: str = Field(default="", max_length=120)
+    email: EmailStr = Field(max_length=160)
+    phone: str = Field(default="", max_length=40)
+    beds: int = Field(default=0, ge=0, le=5000)
+    message: str = Field(default="", max_length=2000)
+    locale: Literal["fa", "en"] = "fa"
+    website: str = Field(default="", max_length=200)  # honeypot: humans never see it
 
 
 class LeadOut(ORMModel):

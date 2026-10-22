@@ -24,6 +24,11 @@ ENV HOSTNAME=0.0.0.0
 
 RUN addgroup -g 10001 -S nodejs && adduser -S -u 10001 -G nodejs nextjs
 
+# The server only needs `node`. npm, npx, corepack and yarn bundle their own dependencies (scanners flag
+# them, and nothing here runs them), so leave them out of the final image.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
+
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

@@ -25,9 +25,11 @@ from .models import (
     User,
     utcnow,
 )
+from .config import get_settings
 from .security import hash_password
 
-RNG = random.Random(1405)
+# Deterministic demo data, never used for secrets or tokens.
+RNG = random.Random(1405)  # nosec B311
 
 DEPARTMENTS = [
     ("ED", "Emergency", "اورژانس", "emergency", 64, 96),
@@ -196,11 +198,12 @@ def seed(db: Session, *, force: bool = False) -> None:
         departments[code] = dept
     db.flush()
 
+    demo_hash = hash_password(get_settings().demo_password)  # one hash for all demo accounts: PBKDF2 is deliberately slow
     users: list[User] = []
     for email, role, name_en, name_fa, title_en, title_fa, dept_code, hue in USERS:
         user = User(
             email=email,
-            password_hash=hash_password("careflow"),
+            password_hash=demo_hash,
             name_en=name_en,
             name_fa=name_fa,
             role=role,
