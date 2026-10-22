@@ -13,7 +13,7 @@ Not delivered, and why, in one place:
 |---|---|
 | A brand-new "shocking" UI | **Not rebuilt.** The app already existed. I applied a focused Apple-design pass instead (section 5). No browser screenshots were taken, so please look at it yourself. |
 | APK and IPA | **Not built.** A plan is in `docs/IMPLEMENTATION_PLAN.md`. |
-| Docker build and run | **Not done.** The machine cannot run it. Compose is validated with `docker compose config`; CI builds and scans the images. |
+| Docker build and run | **Built and scanned in CI, never run.** Both images build on GitHub Actions and scan clean for high and critical issues. Nobody has started the containers. This machine cannot run Docker. |
 | Live penetration test of a deployed system, DAST, fuzzing | **Not done.** What exists is an automated regression pen-test against the API (section 4). |
 | Every skill you listed | **Not all were loaded.** Exact list in section 7. |
 
@@ -60,6 +60,7 @@ No part of the work needed a different model, so nothing was skipped for that re
 | `next build` | killed by the OOM reaper | **exit 0**, 21 pages, no errors or warnings, 4 minutes |
 | Live smoke test (API + built web) | not possible | passed: headers present, no token → 401, IT role → 403, evil CORS origin refused, gzip on, page is RTL |
 | `docker compose config` | n/a | fails closed without secrets, valid with them |
+| GitHub Actions on the pull request | not run | **7 of 7 jobs pass** (secrets, Semgrep, backend, frontend, Dockerfile lint, image scan with SBOM, gate). The first run failed twice; both were pipeline problems, fixed in the last commit. |
 
 Regression pen-test coverage (`backend/tests/test_security.py`): forged, expired, wrong-algorithm, no-`jti`, wrong-issuer
 and wrong-audience tokens; `alg=none`; brute force and lockout; account-enumeration comparison; cross-department access
@@ -130,7 +131,7 @@ No memory existed for this project at the start. I saved two files in the projec
 4. **Three dashboard KPI deltas** are constants shown as measurements. Compute or hide them.
 5. **Token still lives in browser storage.** Moving to an `HttpOnly` cookie with CSRF protection is the first backlog item.
 6. Rate limits and revocation are per process, so run one API worker until Redis is added.
-7. Please build the images once on a machine with Docker and view the UI in both languages and both themes.
+7. Start the containers once on a machine with Docker (`docker compose up --build`) and view the UI in both languages and both themes. CI proves the images build and scan clean, not that they run.
 8. Real patient data needs a legal review before any pilot.
 
 ## 10. Reproduce
